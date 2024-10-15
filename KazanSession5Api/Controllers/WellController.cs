@@ -34,6 +34,44 @@ namespace KazanSession5Api.Controllers
     {
         Wsc2019Session5Context context = new Wsc2019Session5Context();
 
+
+        [HttpGet("{wellId}")]
+        public IActionResult GetWellForEdit(int wellId)
+        {
+            try
+            {
+                var well = context.Wells
+                    .Where(x=>x.Id == wellId)
+                    .Select(x => new
+                    {
+                        x.Id,
+                        x.WellTypeId,
+                        x.WellName,
+                        x.GasOilDepth,
+                        x.Capacity,
+                        wellLayers = x.WellLayers
+                            .OrderBy(y => y.StartPoint) // Order the well layers by StartPoint
+                            .Select(y => new
+                            {
+                                y.Id,
+                                y.WellId,
+                                y.RockTypeId,
+                                y.StartPoint,
+                                y.EndPoint,
+                                rockName = y.RockType.Name,
+                                rockColor = y.RockType.BackgroundColor
+                            }),
+                        wellTypeName = x.WellType.Id
+                    })  ;
+
+                return Ok(well);
+            }
+            catch (Exception)
+            {
+                return NotFound();
+            }
+        }
+
         [HttpGet]
         public IActionResult GetWell()
         {
@@ -47,18 +85,21 @@ namespace KazanSession5Api.Controllers
                         x.WellName,
                         x.GasOilDepth,
                         x.Capacity,
-                        wellLayers = x.WellLayers.Select(y => new
-                        {
-                            y.Id,
-                            y.WellId,
-                            y.RockTypeId,
-                            y.StartPoint,
-                            y.EndPoint,
-                            rockName = y.RockType.Name,
-                            rockColor = y.RockType.BackgroundColor
-                        }),
+                        wellLayers = x.WellLayers
+                            .OrderBy(y => y.StartPoint) // Order the well layers by StartPoint
+                            .Select(y => new
+                            {
+                                y.Id,
+                                y.WellId,
+                                y.RockTypeId,
+                                y.StartPoint,
+                                y.EndPoint,
+                                rockName = y.RockType.Name,
+                                rockColor = y.RockType.BackgroundColor
+                            }),
                         wellTypeName = x.WellType.Id
-                    });
+                    })
+                    .ToList();
 
                 return Ok(wells);
             }
@@ -104,11 +145,19 @@ namespace KazanSession5Api.Controllers
             }
         }
 
-        [HttpPost("update")]
+        [HttpPost("edit")]
         public IActionResult UpdateWell(tempWell well)
         {
             try
             {
+                var editWell = context.Wells.Where(x=>x.Id == well.Id).FirstOrDefault();
+
+                editWell.Capacity = well.Capacity;
+                editWell.GasOilDepth = well.GasOilDepth;
+                editWell.WellName = well.WellName;
+                editWell.WellTypeId = well.WellTypeId;
+
+
                 var newWell = new Well
                 {
                     Id = well.Id,
@@ -118,10 +167,12 @@ namespace KazanSession5Api.Controllers
                     Capacity = well.Capacity
                 };
 
-                var wellLayers = well.WellLayers.Select(x => new WellLayer
+                var WellLayersForDelete = context.WellLayers.Where(x => x.WellId == well.Id).ToList();
+
+
+                var editWellLayers = well.WellLayers.Select(x => new WellLayer
                 {
-                    Id = x.Id,
-                    WellId = x.WellId,
+                    WellId = well.Id,
                     RockTypeId = x.RockTypeId,
                     StartPoint = x.StartPoint,
                     EndPoint = x.EndPoint
@@ -129,8 +180,9 @@ namespace KazanSession5Api.Controllers
                     .ToList();
 
 
-                context.Wells.Add(newWell);
-                context.WellLayers.AddRange(wellLayers);
+                context.Wells.Update(editWell);
+                context.WellLayers.RemoveRange(WellLayersForDelete);
+                context.WellLayers.AddRange(editWellLayers);
                 context.SaveChanges();
 
                 return Ok();
